@@ -98,7 +98,7 @@ def _get_variant_merge_strategy(known_args):
     raise ValueError('Merge strategy is not supported.')
 
 
-def _read_variants(pipeline, known_args):
+def read_variants(pipeline, known_args):
   """Helper method for returning a ``PCollection`` of Variants from VCFs."""
   if known_args.optimize_for_large_inputs:
     variants = (pipeline
@@ -186,15 +186,36 @@ def _validate_args(options, parsed_args):
     transform_options.validate(parsed_args)
 
 
-def run(argv=None):
-  """Runs VCF to BigQuery pipeline."""
+def parse_and_validate_args(argv, variant_transforms_args):
+  """Parses command-line args, filtering options specific to VariantTransforms.
 
+  Args:
+    argv: List of args as strings.
+    variant_transforms_args: A list of
+      variant_transform_options.VariantTransformsOptions representing sets of
+      options that are specific to the VariantTransforms pipeline. All args
+      that are not referenced within this list are assumed to configure general
+      properties of Beam/Dataflow pipelines (e.g. `max_num_workers`, `runner`).
+
+  Returns: (argparse.Namespace, argparse.Namespace)
+    The first element contains arguments recognized for the Variant Transforms
+    pipeline.
+    The second element contains arguments left over, assumed to be relevant
+    for Apache Beam pipelines in general.
+  """
   parser = argparse.ArgumentParser()
   parser.register('type', 'bool', lambda v: v.lower() == 'true')
-  command_line_options = [option() for option in _COMMAND_LINE_OPTIONS]
+  command_line_options = [option() for option in variant_transforms_args]
   _add_parser_arguments(command_line_options, parser)
   known_args, pipeline_args = parser.parse_known_args(argv)
   _validate_args(command_line_options, known_args)
+  return known_args, pipeline_args
+
+
+def run(argv=None):
+  """Runs VCF to BigQuery pipeline."""
+  known_args, pipeline_args = parse_and_validate_args(
+      argv, _COMMAND_LINE_OPTIONS)
 
   variant_merger = _get_variant_merge_strategy(known_args)
   pipeline_mode = _get_pipeline_mode(known_args)
@@ -211,7 +232,7 @@ def run(argv=None):
 
   pipeline_options = PipelineOptions(pipeline_args)
   with beam.Pipeline(options=pipeline_options) as p:
-    variants = _read_variants(p, known_args)
+    variants = read_variants(p, known_args)
     variants |= 'FilterVariants' >> filter_variants.FilterVariants(
         reference_names=known_args.reference_names)
     if variant_merger:

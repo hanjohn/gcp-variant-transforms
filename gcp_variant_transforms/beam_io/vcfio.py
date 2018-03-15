@@ -35,7 +35,7 @@ from apache_beam.transforms import PTransform
 from apache_beam.transforms.display import DisplayDataItem
 
 __all__ = ['ReadFromVcf', 'ReadAllFromVcf', 'Variant', 'VariantCall',
-           'VariantInfo', 'MalformedVcfRecord']
+           'VariantInfo', 'MalformedVcfRecord', 'getElementSizeFn']
 
 
 # Stores data about variant INFO fields. The type of 'data' is specified in the
@@ -354,6 +354,15 @@ class _ToVcfRecordCoder(coders.Coder):
     return MISSING_FIELD_VALUE
 
 
+# TODO(hanjohn): Add unit tests.
+def getElementSizeFn(val):
+  coder = _ToVcfRecordCoder() # Optimize this?
+  encoded_bytestring = coder.encode(val)
+  logging.debug("encoded element '%s' with len %d",
+                encoded_bytestring, len(encoded_bytestring))
+  return len(encoded_bytestring)
+
+
 # TODO: Remove once header processing changes are released in the Beam SDK.
 class _TextSource(filebasedsource.FileBasedSource):
   r"""A source for reading text files.
@@ -645,7 +654,9 @@ class _VcfSource(filebasedsource.FileBasedSource):
   :class:`Variant` objects.
   """
 
+  # DEFAULT_VCF_READ_BUFFER_SIZE = 65536  # 64kB
   DEFAULT_VCF_READ_BUFFER_SIZE = 65536  # 64kB
+  # DEFAULT_DESIRED_BUNDLE_SIZE = 64 * 1024 * 1024  # 64MB
 
   def __init__(self,
                file_pattern,
@@ -862,7 +873,6 @@ class _VcfSource(filebasedsource.FileBasedSource):
         calls.append(call)
 
       return calls
-
 
 class ReadFromVcf(PTransform):
   """A :class:`~apache_beam.transforms.ptransform.PTransform` for reading VCF
