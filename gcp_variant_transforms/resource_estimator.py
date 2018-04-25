@@ -48,10 +48,20 @@ class WriteAndLogBytesize(WriteToText):
 
 def _getSizeOfInputFiles(input_patterns):
   match_results = FileSystems.match(input_patterns)
-  logging.warning("annyeong: %s", str(match_results[0].metadata_list))
-  # for match in match_results:
-    # for file_metadata in match.metadata_list:
-      # logging.warning("hello: %s %fGB", file_metadata.path, file_metadata.size_in_bytes / 1e9)
+  # logging.warning("annyeong: %s", str(match_results[1].metadata_list))
+  # logging.warning("hello: " + str(match_results[0]))
+  count = 0
+  total_size = 0
+  for match in match_results:
+    for file_metadata in match.metadata_list:
+      logging.warning("hello: %s %fGB", file_metadata.path, file_metadata.size_in_bytes / 1e9)
+      count += 1
+      total_size += file_metadata.size_in_bytes
+      if count % 1000 == 0:
+        logging.warning("done with %d files", count)
+  logging.warning("done with %d files", count)
+  logging.warning("hello: %fGB", total_size / 1e9)
+  return match_results
 
 
 def run(argv=None):
@@ -59,7 +69,10 @@ def run(argv=None):
   known_args, pipeline_args = vcf_to_bq.parse_and_validate_args(
       argv, _COMMAND_LINE_OPTIONS)
 
-  _getSizeOfInputFiles([known_args.input_pattern])
+  # print "hello " + known_args.input_pattern
+  # print "hunny *"
+  matched_files = _getSizeOfInputFiles([known_args.input_pattern])
+  # matched_files = _getSizeOfInputFiles("*")
 
   ## file_metadata = match_results[0].metadata_list
   #file_pattern = match_results[0].pattern
