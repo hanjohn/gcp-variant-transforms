@@ -373,7 +373,9 @@ class _VcfSource(filebasedsource.FileBasedSource):
                compression_type=CompressionTypes.AUTO,
                buffer_size=DEFAULT_VCF_READ_BUFFER_SIZE,
                validate=True,
-               allow_malformed_records=False):
+               allow_malformed_records=False,
+               snippet_size_limit=None,
+               key_output_by_file=False):
     super(_VcfSource, self).__init__(file_pattern,
                                      compression_type=compression_type,
                                      validate=validate)
@@ -381,6 +383,8 @@ class _VcfSource(filebasedsource.FileBasedSource):
     self._compression_type = compression_type
     self._buffer_size = buffer_size
     self._allow_malformed_records = allow_malformed_records
+    self._snippet_size_limit = snippet_size_limit
+    self._key_output_by_file = key_output_by_file
 
   def read_records(self, file_name, range_tracker):
     record_iterator = _VcfSource._VcfRecordIterator(
@@ -393,8 +397,12 @@ class _VcfSource(filebasedsource.FileBasedSource):
         skip_header_lines=0)
 
     # Convert iterator to generator to abstract behavior
-    for line in record_iterator:
-      yield line
+    for index, line in enumerate(record_iterator):
+      logging.info("Reading %s, line %d: %s", file_name, index, line)
+      if self._snippet_size_limit and index >= self._snippet_size_limit:
+        # If snippet_size_limit is set, only read a limited number of records from the file.
+        break
+      yield line if not self._key_output_by_file else (file_name, line,)
 
   class _VcfRecordIterator(object):
     """An Iterator for processing a single VCF file."""
@@ -601,6 +609,8 @@ class ReadFromVcf(PTransform):
       compression_type=CompressionTypes.AUTO,
       validate=True,
       allow_malformed_records=False,
+      snippet_size_limit=None,
+      key_output_by_file=False,
       **kwargs):
     """Initialize the :class:`ReadFromVcf` transform.
 
@@ -619,17 +629,19 @@ class ReadFromVcf(PTransform):
         file_pattern,
         compression_type,
         validate=validate,
-        allow_malformed_records=allow_malformed_records)
+        allow_malformed_records=allow_malformed_records,
+        snippet_size_limit=snippet_size_limit,
+        key_output_by_file=key_output_by_file)
 
   def expand(self, pvalue):
     return pvalue.pipeline | Read(self._source)
 
 
-def _create_vcf_source(
-    file_pattern=None, compression_type=None, allow_malformed_records=None):
-  return _VcfSource(file_pattern=file_pattern,
-                    compression_type=compression_type,
-                    allow_malformed_records=allow_malformed_records)
+# def _create_vcf_source(
+#     file_pattern=None, compression_type=None, allow_malformed_records=None, snippet_size_limit=None):
+#   return _VcfSource(file_pattern=file_pattern,
+#                     compression_type=compression_type,
+#                     allow_malformed_records=allow_malformed_records)
 
 
 class ReadAllFromVcf(PTransform):
@@ -651,6 +663,8 @@ class ReadAllFromVcf(PTransform):
       desired_bundle_size=DEFAULT_DESIRED_BUNDLE_SIZE,
       compression_type=CompressionTypes.AUTO,
       allow_malformed_records=False,
+      snippet_size_limit=None,
+      key_output_by_file=False,
       **kwargs):
     """Initialize the :class:`ReadAllFromVcf` transform.
 
@@ -669,10 +683,14 @@ class ReadAllFromVcf(PTransform):
     """
     super(ReadAllFromVcf, self).__init__(**kwargs)
     source_from_file = partial(
-        _create_vcf_source, compression_type=compression_type,
-        allow_malformed_records=allow_malformed_records)
+        # _create_vcf_source, compression_type=compression_type, DO NOT SUBMIT
+        _VcfSource, compression_type=compression_type,
+        allow_malformed_records=allow_malformed_records,
+        snippet_size_limit=snippet_size_limit,
+        key_output_by_file=key_output_by_file)
     self._read_all_files = filebasedsource.ReadAllFiles(
-        True,  # splittable
+        # True,  # splittable
+        False,  # splittable # DO NOT SUBMIT
         CompressionTypes.AUTO, desired_bundle_size,
         0,  # min_bundle_size
         source_from_file)

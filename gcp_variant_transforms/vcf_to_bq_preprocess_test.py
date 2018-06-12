@@ -14,6 +14,7 @@
 
 """Tests for vcf_to_bq_preprocess script."""
 
+import logging
 import unittest
 
 from apache_beam.io import filesystems
@@ -25,7 +26,7 @@ class PreprocessTest(unittest.TestCase):
   _REPORT_NAME = 'header_conflicts_report.csv'
   _RESOLVED_HEADERS_FILE_NAME = 'resolved_headers.vcf'
 
-  def test_preprocess_run_locally(self):
+  def test_preprocess_run_undefined_header_fields(self):
     with temp_dir.TempDir() as tempdir:
       report_path = filesystems.FileSystems.join(tempdir.get_path(),
                                                  PreprocessTest._REPORT_NAME)
@@ -44,3 +45,26 @@ class PreprocessTest(unittest.TestCase):
       vcf_to_bq_preprocess.run(argv)
       assert filesystems.FileSystems.exists(report_path)
       assert filesystems.FileSystems.exists(resolved_headers_path)
+
+  def test_preprocess_run_valid_vcf(self):
+    with temp_dir.TempDir() as tempdir:
+      report_path = filesystems.FileSystems.join(tempdir.get_path(),
+                                                 PreprocessTest._REPORT_NAME)
+      resolved_headers_path = filesystems.FileSystems.join(
+          tempdir.get_path(), PreprocessTest._RESOLVED_HEADERS_FILE_NAME)
+      argv = [
+          '--input_pattern',
+          'gs://gcp-variant-transforms-testfiles/small_tests/valid-4.1-large.vcf',
+          '--report_all',
+          '--report_path',
+          report_path,
+          '--resolved_headers_path',
+          resolved_headers_path
+      ]
+      vcf_to_bq_preprocess.run(argv)
+      assert filesystems.FileSystems.exists(report_path)
+      assert filesystems.FileSystems.exists(resolved_headers_path)
+
+if __name__ == '__main__':
+  logging.getLogger().setLevel(logging.INFO)
+  unittest.main()

@@ -21,6 +21,7 @@ PTransforms and writing the output.
 from typing import List  # pylint: disable=unused-import
 import argparse
 import enum
+import logging
 
 import apache_beam as beam
 from apache_beam import pvalue
@@ -84,19 +85,23 @@ def get_pipeline_mode(known_args):
   return PipelineModes.SMALL
 
 
-def read_variants(pipeline, known_args):
-  # type: (beam.Pipeline, argparse.Namespace) -> pvalue.PCollection
+def read_variants(pipeline, known_args, snippet_size_limit=None, key_output_by_file=False):
+  # type: (beam.Pipeline, argparse.Namespace, int, bool) -> pvalue.PCollection
   """Helper method for returning a PCollection of Variants from VCFs."""
   if known_args.optimize_for_large_inputs:
     variants = (pipeline
                 | 'InputFilePattern' >> beam.Create([known_args.input_pattern])
                 | 'ReadAllFromVcf' >> vcfio.ReadAllFromVcf(
-                    allow_malformed_records=(
-                        known_args.allow_malformed_records)))
+                    allow_malformed_records=known_args.allow_malformed_records,
+                    snippet_size_limit=snippet_size_limit,
+                    key_output_by_file=key_output_by_file))
   else:
     variants = pipeline | 'ReadFromVcf' >> vcfio.ReadFromVcf(
         known_args.input_pattern,
-        allow_malformed_records=known_args.allow_malformed_records)
+        allow_malformed_records=known_args.allow_malformed_records,
+        snippet_size_limit=snippet_size_limit,
+        key_output_by_file=key_output_by_file)
+  logging.info("VARIANT SNIPPETS: " + str(variants))
   return variants
 
 

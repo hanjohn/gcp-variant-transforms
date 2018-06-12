@@ -42,7 +42,9 @@ from typing import List, Optional  # pylint: disable=unused-import
 
 import apache_beam as beam
 from apache_beam import pvalue  # pylint: disable=unused-import
+from apache_beam import coders  # pylint: disable=unused-import
 from apache_beam.io import filesystems
+from apache_beam.io.textio import WriteToText
 from apache_beam.options import pipeline_options
 
 from gcp_variant_transforms import vcf_to_bq_common
@@ -188,6 +190,16 @@ def run(argv=None):
   beam_pipeline_options = pipeline_options.PipelineOptions(pipeline_args)
   pipeline = beam.Pipeline(options=beam_pipeline_options)
   variants = vcf_to_bq_common.read_variants(pipeline, known_args)
+  logging.info('HANJOHN VARIANT TYPE: ' + str(variants.element_type))
+  logging.info('HANJOHN VARIANT CODER TYPE: ' + str(coders.registry.get_coder(variants.element_type)))
+  variants_pcoll_type = variants.element_type
+  (variants
+   # | 'toString' >> beam.Map(lambda ele : coders.registry.get_coder(type(ele)).encode(ele))
+   | 'toString' >> beam.Map(lambda ele : coders.registry.get_coder(variants_pcoll_type).encode(ele))
+   # ers.registry.get_coder(variants_pcoll_type).encode(ele))
+   # | 'toString' >> beam.Map(lambda ele : coders.registry.get_coder(type(ele)).encode(ele))
+   | 'writetotext' >> WriteToText(file_path_prefix='gs://my-bucket-hanjohn-vt-test/outputs/vcf_to_bq_printoutputcombined2', num_shards=1)
+   )
   variants |= 'FilterVariants' >> filter_variants.FilterVariants(
       reference_names=known_args.reference_names)
   if variant_merger:

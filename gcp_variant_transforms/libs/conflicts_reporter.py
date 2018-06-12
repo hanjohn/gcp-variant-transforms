@@ -25,6 +25,7 @@ TODO(yifangchen): Eventually, it also contains the malformed records.
 
 from typing import Dict, List, Union  # pylint: disable=unused-import
 
+from apache_beam.pvalue import EmptySideInput
 from apache_beam.io.filesystems import FileSystems
 
 from gcp_variant_transforms.beam_io.vcf_header_io import VcfHeader  # pylint: disable=unused-import
@@ -60,11 +61,12 @@ def generate_conflicts_report(header_definitions,
   content_lines = []
   content_lines.extend(_generate_conflicting_headers_lines(
       _extract_conflicts(header_definitions.formats), resolved_headers.formats))
-  content_lines.extend(_generate_conflicting_headers_lines(
-      _extract_conflicts(header_definitions.infos), resolved_headers.infos))
-  content_lines.extend(_generate_inferred_headers_lines(inferred_headers.infos))
-  content_lines.extend(_generate_inferred_headers_lines(
-      inferred_headers.formats))
+  if issubclass(type(header_definitions), EmptySideInput): #or issubclass(type(resolved_headers), EmptySideInput):
+      content_lines.extend(_generate_conflicting_headers_lines(
+          _extract_conflicts(header_definitions.infos), resolved_headers.infos))
+      content_lines.extend(_generate_inferred_headers_lines(inferred_headers.infos))
+      content_lines.extend(_generate_inferred_headers_lines(
+          inferred_headers.formats))
   _write_to_report(content_lines, file_path)
 
 
