@@ -27,11 +27,11 @@ import apache_beam as beam
 from apache_beam.coders import coders
 from apache_beam.io import filebasedsource
 from apache_beam.io import filesystems
-from apache_beam.io import range_trackers  # pylint: disable=unused-import
+from apache_beam.io import range_trackers
 from apache_beam.io import textio
-from apache_beam.io.filesystem import CompressionTypes
-from apache_beam.io.iobase import Read
-from apache_beam.transforms import PTransform
+from apache_beam.io import filesystem
+from apache_beam.io import iobase
+from apache_beam import transforms
 
 from gcp_variant_transforms.beam_io import vcf_parser
 
@@ -192,7 +192,7 @@ class _VcfSource(filebasedsource.FileBasedSource):
   def __init__(self,
                file_pattern,  # type: str
                representative_header_lines=None,  # type: List[str]
-               compression_type=CompressionTypes.AUTO,  # type: str
+               compression_type=filesystem.CompressionTypes.AUTO,  # type: str
                buffer_size=DEFAULT_VCF_READ_BUFFER_SIZE,  # type: int
                validate=True,  # type: bool
                allow_malformed_records=False,  # type: bool
@@ -235,7 +235,8 @@ class _VcfSource(filebasedsource.FileBasedSource):
     for record in record_iterator:
       yield record
 
-class ReadFromVcf(PTransform):
+
+class ReadFromVcf(transforms.PTransform):
   """A :class:`~apache_beam.transforms.ptransform.PTransform` for reading VCF
   files.
 
@@ -249,7 +250,7 @@ class ReadFromVcf(PTransform):
       self,
       file_pattern=None,  # type: str
       representative_header_lines=None,  # type: List[str]
-      compression_type=CompressionTypes.AUTO,  # type: str
+      compression_type=filesystem.CompressionTypes.AUTO,  # type: str
       validate=True,  # type: bool
       allow_malformed_records=False,  # type: bool
       vcf_parser_type=VcfParserType.PYVCF,  # type: int
@@ -280,7 +281,7 @@ class ReadFromVcf(PTransform):
         vcf_parser_type=vcf_parser_type)
 
   def expand(self, pvalue):
-    return pvalue.pipeline | Read(self._source)
+    return pvalue.pipeline | iobase.Read(self._source)
 
 
 def _create_vcf_source(
@@ -292,7 +293,7 @@ def _create_vcf_source(
                     allow_malformed_records=allow_malformed_records)
 
 
-class ReadAllFromVcf(PTransform):
+class ReadAllFromVcf(transforms.PTransform):
   """A :class:`~apache_beam.transforms.ptransform.PTransform` for reading a
   :class:`~apache_beam.pvalue.PCollection` of VCF files.
 
@@ -310,7 +311,7 @@ class ReadAllFromVcf(PTransform):
       self,
       representative_header_lines=None,  # type: List[str]
       desired_bundle_size=DEFAULT_DESIRED_BUNDLE_SIZE,  # type: int
-      compression_type=CompressionTypes.AUTO,  # type: str
+      compression_type=filesystem.CompressionTypes.AUTO,  # type: str
       allow_malformed_records=False,  # type: bool
       **kwargs  # type: **str
       ):
@@ -339,7 +340,7 @@ class ReadAllFromVcf(PTransform):
         allow_malformed_records=allow_malformed_records)
     self._read_all_files = filebasedsource.ReadAllFiles(
         True,  # splittable
-        CompressionTypes.AUTO, desired_bundle_size,
+        filesystem.CompressionTypes.AUTO, desired_bundle_size,
         0,  # min_bundle_size
         source_from_file)
 
@@ -347,13 +348,13 @@ class ReadAllFromVcf(PTransform):
     return pvalue | 'ReadAllFiles' >> self._read_all_files
 
 
-class WriteToVcf(PTransform):
+class WriteToVcf(transforms.PTransform):
   """A PTransform for writing to VCF files."""
 
   def __init__(self,
                file_path,
                num_shards=1,
-               compression_type=CompressionTypes.AUTO,
+               compression_type=filesystem.CompressionTypes.AUTO,
                headers=None):
     # type: (str, int, str, List[str]) -> None
     """Initialize a WriteToVcf PTransform.
@@ -404,7 +405,7 @@ class _WriteVcfDataLinesFn(beam.DoFn):
         file_to_write.write(self._coder.encode(variant))
 
 
-class WriteVcfDataLines(PTransform):
+class WriteVcfDataLines(transforms.PTransform):
   """A PTransform for writing VCF data lines.
 
   This PTransform takes PCollection<`file_path`, `variants`> as input, and

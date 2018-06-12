@@ -56,8 +56,10 @@ from apache_beam import pvalue
 from apache_beam.options import pipeline_options
 
 from gcp_variant_transforms import pipeline_common
+from gcp_variant_transforms.beam_io import vcf_snippet_io
 from gcp_variant_transforms.beam_io import vcfio
 from gcp_variant_transforms.libs import preprocess_reporter
+from gcp_variant_transforms.libs import resource_estimator
 from gcp_variant_transforms.options import variant_transform_options
 from gcp_variant_transforms.transforms import filter_variants
 from gcp_variant_transforms.transforms import infer_headers
@@ -66,6 +68,8 @@ from gcp_variant_transforms.transforms import merge_header_definitions
 
 _COMMAND_LINE_OPTIONS = [variant_transform_options.PreprocessOptions]
 
+# Number of lines from each VCF that should be read when estimating disk usage.
+_SNIPPET_READ_SIZE = 50
 
 def _get_inferred_headers(variants,  # type: pvalue.PCollection
                           merged_header  # type: pvalue.PCollection
@@ -87,6 +91,36 @@ def _get_inferred_headers(variants,  # type: pvalue.PCollection
   return inferred_headers, merged_header
 
 
+# TODO(hanjohn): Add an e2e test
+def _estimate_disk_resources(p, input_pattern):
+  # type: (pvalue.PCollection, str) -> (pvalue.PCollection)
+  raw_file_sizes = (p
+                    | 'InputFilePattern' >> beam.Create([input_pattern])
+                    | 'GetRawFileSizes' >> beam.FlatMap(
+                        resource_estimator.get_file_sizes))
+  # TODO(hanjohn): Add support for `ReadAll` pattern for inputs with very large
+  # number of files.
+  vcf_snippet_sizes = (p
+                       | 'GetVcfSnippets' >> vcf_snippet_io.ReadVcfSnippet(
+                           input_pattern, _SNIPPET_READ_SIZE)
+                       | 'FindSnippetSizes' >> beam.Map(
+                           resource_estimator.measure_variant_size)
+                       | 'AggregateSnippetSizePerFile' >> beam.CombinePerKey(
+                           resource_estimator.SnippetSizeInfoSumFn()))
+
+  result = ({'whole_file_raw_size': raw_file_sizes,
+             'snippet_stats': vcf_snippet_sizes}
+            | 'ConsolidateFileStats' >> beam.CoGroupByKey()
+            | 'EstimateEncodedFileSizes' >> beam.Map(
+                resource_estimator.estimate_file_encoded_size)
+            | 'SumFileSizeEstimates' >> beam.CombineGlobally(
+                resource_estimator.FileSizeInfoSumFn()))
+  result | ('PrintEstimate' >>  # pylint: disable=expression-not-assigned
+            beam.Map(lambda x: logging.info(
+                "Final estimate of encoded size: %d GB", x.encoded / 1e9)))
+  return result
+
+
 def run(argv=None):
   # type: (List[str]) -> (str, str)
   """Runs preprocess pipeline."""
@@ -102,6 +136,11 @@ def run(argv=None):
     merged_definitions = (headers
                           | 'MergeDefinitions' >>
                           merge_header_definitions.MergeDefinitions())
+
+    disk_usage_estimate = None
+    if known_args.estimate_disk_usage:
+      disk_usage_estimate = beam.pvalue.AsSingleton(
+          _estimate_disk_resources(p, known_args.input_pattern))
     if known_args.report_all_conflicts:
       variants = p | 'ReadFromVcf' >> vcfio.ReadFromVcf(
           known_args.input_pattern, allow_malformed_records=True)
@@ -112,6 +151,7 @@ def run(argv=None):
            | 'GenerateConflictsReport' >>
            beam.ParDo(preprocess_reporter.generate_report,
                       known_args.report_path,
+                      disk_usage_estimate,
                       beam.pvalue.AsSingleton(merged_headers),
                       beam.pvalue.AsSingleton(inferred_headers),
                       beam.pvalue.AsIter(malformed_records)))
@@ -120,6 +160,7 @@ def run(argv=None):
            | 'GenerateConflictsReport' >>
            beam.ParDo(preprocess_reporter.generate_report,
                       known_args.report_path,
+                      disk_usage_estimate,
                       beam.pvalue.AsSingleton(merged_headers)))
 
     if known_args.resolved_headers_path:

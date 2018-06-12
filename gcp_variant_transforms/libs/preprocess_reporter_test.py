@@ -15,10 +15,10 @@
 """Test cases for preprocess_reporter module."""
 
 from collections import OrderedDict
-from typing import List  # pylint: disable=unused-import
+from typing import List
 import unittest
 
-from apache_beam.io.filesystems import FileSystems
+from apache_beam.io import filesystems
 from vcf.parser import _Format as Format
 from vcf.parser import _Info as Info
 
@@ -43,14 +43,15 @@ class PreprocessReporterTest(unittest.TestCase):
       ):
     # type: (...) -> None
     with temp_dir.TempDir() as tempdir:
-      file_path = FileSystems.join(tempdir.get_path(),
+      file_path = filesystems.FileSystems.join(tempdir.get_path(),
                                    PreprocessReporterTest._REPORT_NAME)
       preprocess_reporter.generate_report(header_definitions,
                                           file_path,
+                                          None,
                                           resolved_headers,
                                           inferred_headers,
                                           malformed_records)
-      with FileSystems.open(file_path) as f:
+      with filesystems.FileSystems.open(file_path) as f:
         reader = f.readlines()
         self.assertEqual(reader, expected_content)
 
