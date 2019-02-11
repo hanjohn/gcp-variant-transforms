@@ -162,7 +162,7 @@ class _EstimateVcfSizeSource(filebasedsource.FileBasedSource):
         buffer_size=self.DEFAULT_VCF_READ_BUFFER_SIZE,
         skip_header_lines=0)
 
-    _, raw_file_size = _get_file_size(file_name)
+    raw_file_size = _get_file_size(file_name)
 
     # Open distinct channel to read lines as raw bytestrings.
     with filesystems.FileSystems.open(file_name,
